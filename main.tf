@@ -42,10 +42,15 @@ locals {
   ecs_service_name = "demo-service"
 }
 
+data "aws_ecs_task_definition" "main" {
+  task_definition = aws_ecs_task_definition.ecs_task.family
+}
+
 resource "aws_ecs_service" "ecs_service" {
-  name            = local.ecs_service_name
-  cluster         = aws_ecs_cluster.cluster.id
-  task_definition = aws_ecs_task_definition.ecs_task.arn
+  name    = local.ecs_service_name
+  cluster = aws_ecs_cluster.cluster.id
+  # task_definition = aws_ecs_task_definition.ecs_task.arn
+  task_definition = "${aws_ecs_task_definition.ecs_task.family}:${max(aws_ecs_task_definition.ecs_task.revision, data.aws_ecs_task_definition.main.revision)}"
   launch_type     = "FARGATE"
   desired_count   = 1
 
@@ -55,8 +60,8 @@ resource "aws_ecs_service" "ecs_service" {
       aws_security_group.service_sg.id
     ]
     subnets = [
-      aws_subnet.private_west_a.id,
-      aws_subnet.private_west_b.id,
+      aws_subnet.public_west_a.id,
+      aws_subnet.public_west_b.id,
     ]
   }
 
@@ -88,7 +93,11 @@ resource "aws_ecs_task_definition" "ecs_task" {
       name  = "container-definition"
       image = join("@", [aws_ecr_repository.instance.repository_url, data.aws_ecr_image.instance.image_digest])
 
-      essential = true
+      cpu    = 512
+      memory = 2048
+
+      network_mode = "awsvpc"
+      essential    = true
 
       logConfiguration = {
         logDriver = "awslogs",
@@ -97,11 +106,12 @@ resource "aws_ecs_task_definition" "ecs_task" {
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "demo"
         }
-      },
+      }
+
       portMappings = [
         {
           containerPort = var.container_port
-          # hostPort = var.container_port
+          hostPort      = var.container_port
         }
       ]
     }
@@ -215,10 +225,10 @@ resource "aws_lb_target_group" "instance" {
   protocol             = "HTTP"
   port                 = var.container_port
   vpc_id               = aws_vpc.demo_ecs.id
-  deregistration_delay = 30 // seconds
+  deregistration_delay = 120 // seconds
   health_check {
-    interval          = 5 // seconds
-    timeout           = 2 // seconds
+    interval          = 90 // seconds
+    timeout           = 60  // seconds
     healthy_threshold = 2
     protocol          = "HTTP"
     path              = "/"
@@ -345,12 +355,15 @@ resource "aws_security_group" "service_sg" {
 
   # All HTTP traffic in
   ingress {
-    from_port       = 0
-    to_port         = 0
-    protocol        = "tcp"
-    security_groups = [aws_security_group.load_balancer_sg.id]
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    # security_groups = [aws_security_group.load_balancer_sg.id]
+    ipv6_cidr_blocks = ["::/0"]
   }
 
+  # # TLS from VPC
   # ingress {
   #   protocol    = "tcp"
   #   from_port   = 443
