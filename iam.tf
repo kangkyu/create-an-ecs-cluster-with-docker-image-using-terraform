@@ -19,3 +19,13 @@ resource "aws_iam_role_policy_attachment" "instance" {
   role       = aws_iam_role.ecs_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
+
+resource "aws_iam_role" "task_definition_role" {
+  name               = "task-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_document.json
+}
+
+resource "aws_iam_role_policy_attachment" "task_definition_role_policy" {
+  role       = aws_iam_role.task_definition_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+}

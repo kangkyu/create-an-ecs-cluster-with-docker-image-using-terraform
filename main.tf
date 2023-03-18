@@ -13,8 +13,14 @@ terraform {
 
 provider "docker" {}
 
+
+variable "aws_region" {
+  default = "us-west-2"
+  type    = string
+}
+
 provider "aws" {
-  region = "us-west-2"
+  region = var.aws_region
 
   default_tags {
     tags = {
@@ -67,8 +73,10 @@ resource "aws_ecs_task_definition" "ecs_task" {
   family       = "service"
   network_mode = "awsvpc"
 
-  requires_compatibilities = ["FARGATE", "EC2"]
-  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  requires_compatibilities = ["FARGATE"]
+
+  execution_role_arn = aws_iam_role.ecs_execution_role.arn
+  task_role_arn      = aws_iam_role.task_definition_role.arn
 
   cpu    = 512
   memory = 2048
@@ -80,7 +88,16 @@ resource "aws_ecs_task_definition" "ecs_task" {
       name  = "container-definition"
       image = join("@", [aws_ecr_repository.instance.repository_url, data.aws_ecr_image.instance.image_digest])
 
-      # essential = true
+      essential = true
+
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.log_group.id
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "demo"
+        }
+      },
       portMappings = [
         {
           containerPort = var.container_port
@@ -93,6 +110,10 @@ resource "aws_ecs_task_definition" "ecs_task" {
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "X86_64"
+  }
+
+  tags = {
+    Name = "demo-ecs-td"
   }
 }
 
@@ -228,13 +249,13 @@ resource "aws_ecr_lifecycle_policy" "main" {
   })
 }
 
-# resource "aws_cloudwatch_log_group" "log-group" {
-#   name = "demo-logs"
+resource "aws_cloudwatch_log_group" "log_group" {
+  name = "demo-logs"
 
-#   tags = {
-#     Application = "demo"
-#   }
-# }
+  tags = {
+    Application = "demo"
+  }
+}
 
 resource "aws_vpc" "demo_ecs" {
   cidr_block           = "10.0.0.0/16"
