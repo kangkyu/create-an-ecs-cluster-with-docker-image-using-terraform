@@ -8,6 +8,8 @@ COPY . ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o helloworld
 RUN chmod +x helloworld
 
+EXPOSE 8400
+
 FROM ubuntu:latest
 COPY --from=builder /app/helloworld helloworld
 CMD ["./helloworld"]
